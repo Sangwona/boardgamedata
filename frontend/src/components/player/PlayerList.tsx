@@ -109,7 +109,7 @@ const PlayerList: React.FC = () => {
                         <i className="bi bi-eye"></i>
                       </Link>
                       <Link
-                        to={`/players/${player.id}/edit`}
+                        to={`/players/edit/${player.id}`}
                         className="btn btn-outline-secondary"
                       >
                         <i className="bi bi-pencil"></i>

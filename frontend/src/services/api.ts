@@ -82,8 +82,15 @@ export const meetingApi = {
   },
 
   getById: async (id: number): Promise<MeetingDetail> => {
-    const { data } = await api.get(`/meetings/${id}`);
-    return data;
+    try {
+      console.log(`미팅 상세 정보 요청: /meetings/${id}`);
+      const { data } = await api.get(`/meetings/${id}`);
+      console.log(`미팅 상세 정보 응답:`, data);
+      return data;
+    } catch (error) {
+      console.error(`미팅 상세 정보 조회 오류(ID: ${id}):`, error);
+      throw error;
+    }
   },
 
   create: async (meeting: MeetingForm): Promise<Meeting> => {
@@ -109,8 +116,15 @@ export const gameApi = {
   },
 
   getById: async (id: number): Promise<GameWithStats> => {
-    const { data } = await api.get(`/games/${id}`);
-    return data;
+    try {
+      console.log(`게임 상세 정보 요청: /games/${id}`);
+      const { data } = await api.get(`/games/${id}`);
+      console.log(`게임 상세 정보 응답:`, data);
+      return data;
+    } catch (error) {
+      console.error(`게임 상세 정보 조회 오류(ID: ${id}):`, error);
+      throw error;
+    }
   },
 
   create: async (game: GameForm): Promise<Game> => {
@@ -131,6 +145,19 @@ export const gameResultApi = {
     return data;
   },
 
+  createStandalone: async (
+    gameId: number,
+    date: string,
+    results: GameResultForm[]
+  ): Promise<any> => {
+    const { data } = await api.post(`/game-records`, {
+      game_id: gameId,
+      date: date,
+      results: results,
+    });
+    return data;
+  },
+
   getUnregisteredByName: async (name: string): Promise<GameResult[]> => {
     const { data } = await api.get("/unregistered_records", {
       params: { name },
@@ -145,6 +172,19 @@ export const gameResultApi = {
     await api.post(`/players/${playerId}/claim_records`, {
       record_ids: recordIds,
     });
+  },
+};
+
+// 통계 API
+export const statsApi = {
+  getStats: async () => {
+    const response = await api.get("/stats");
+    return response.data;
+  },
+
+  getPlayerStats: async (playerId: number) => {
+    const response = await api.get(`/stats/player/${playerId}`);
+    return response.data;
   },
 };
 

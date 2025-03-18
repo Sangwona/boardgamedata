@@ -17,9 +17,14 @@ const MeetingDetail: React.FC = () => {
         setLoading(true);
         const data = await meetingApi.getById(parseInt(meetingId!));
         setMeeting(data);
-      } catch (err) {
-        setError("모임 정보를 불러오는데 실패했습니다.");
+      } catch (err: any) {
         console.error("Error fetching meeting details:", err);
+        const errorMessage =
+          err.response?.data?.error ||
+          `모임 정보를 불러오는데 실패했습니다. 오류: ${
+            err.message || "알 수 없는 오류"
+          }`;
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }

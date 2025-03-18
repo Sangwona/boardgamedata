@@ -55,8 +55,11 @@ const GameList: React.FC = () => {
           <Link to="/meetings/add" className="btn btn-outline-primary">
             <i className="bi bi-calendar-plus me-1"></i> 모임 추가
           </Link>
+          <Link to="/game-records/add" className="btn btn-outline-primary">
+            <i className="bi bi-trophy me-1"></i> 게임 기록 추가
+          </Link>
           <Link to="/games/add" className="btn btn-primary">
-            <i className="bi bi-plus-circle me-1"></i> 게임 추가
+            <i className="bi bi-joystick me-1"></i> 게임 추가
           </Link>
         </div>
       </div>

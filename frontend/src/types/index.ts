@@ -5,6 +5,8 @@ export interface Player {
   birth_year: number;
   mbti: string;
   location: string;
+  nickname?: string;
+  comment?: string;
   game_history?: GameResult[];
 }
 
@@ -107,6 +109,13 @@ export interface GameResultForm {
   player_name?: string;
   score: number;
   is_winner: boolean;
+}
+
+// 독립형 게임 기록 관련 타입
+export interface StandaloneGameRecordForm {
+  game_id: number;
+  date: string;
+  results: GameResultForm[];
 }
 
 // API 응답 타입

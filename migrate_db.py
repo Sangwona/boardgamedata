@@ -1,18 +1,21 @@
 import sqlite3
 import os
+from datetime import datetime, timedelta
+import random
+
+# 데이터베이스 파일 경로
+DB_FILE = 'boardgame.db'
 
 def migrate_database():
     print("데이터베이스 마이그레이션 시작...")
     
-    # 데이터베이스 파일 확인
-    db_file = 'board_game_tracker.db'
-    
-    if not os.path.exists(db_file):
-        print(f"오류: {db_file} 파일이 존재하지 않습니다.")
+    # 파일이 존재하는지 확인
+    if not os.path.exists(DB_FILE):
+        print(f"오류: {DB_FILE} 파일이 존재하지 않습니다.")
         return
     
     # 데이터베이스 연결
-    conn = sqlite3.connect(db_file)
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
     # 테이블 구조 변경 진행

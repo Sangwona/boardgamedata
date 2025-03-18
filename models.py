@@ -15,7 +15,7 @@ class Player(db.Model):
 # 모임 모델
 class Meeting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.String(10), nullable=False)  # YYYY-MM-DD 형식
+    date = db.Column(db.String(8), nullable=False)  # YY-MM-DD 형식
     location = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(200), nullable=True)
     
@@ -42,7 +42,7 @@ class Game(db.Model):
 # 게임 기록 모델
 class GameRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    meeting_id = db.Column(db.Integer, db.ForeignKey('meeting.id'), nullable=False)
+    meeting_id = db.Column(db.Integer, db.ForeignKey('meeting.id'), nullable=True)
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
     
     # 관계 설정

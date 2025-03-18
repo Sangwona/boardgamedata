@@ -13,10 +13,11 @@ import GameList from "./components/game/GameList";
 import GameDetail from "./components/game/GameDetail";
 import GameForm from "./components/game/GameForm";
 import GameRecordForm from "./components/gameRecord/GameRecordForm";
+import StandaloneGameRecordForm from "./components/gameRecord/StandaloneGameRecordForm";
 import NotFound from "./components/common/NotFound";
 import "./App.css";
 
-function App() {
+const App: React.FC = () => {
   return (
     <div className="App d-flex flex-column min-vh-100">
       <Header />
@@ -26,25 +27,29 @@ function App() {
 
           {/* 플레이어 관련 라우트 */}
           <Route path="/players" element={<PlayerList />} />
-          <Route path="/players/:playerId" element={<PlayerDetail />} />
           <Route path="/players/add" element={<PlayerForm />} />
-          <Route path="/players/:playerId/edit" element={<PlayerForm />} />
+          <Route path="/players/edit/:id" element={<PlayerForm />} />
+          <Route path="/players/:id" element={<PlayerDetail />} />
 
-          {/* 모임 관련 라우트 */}
+          {/* 미팅 관련 라우트 */}
           <Route path="/meetings" element={<MeetingList />} />
-          <Route path="/meetings/:meetingId" element={<MeetingDetail />} />
           <Route path="/meetings/add" element={<MeetingForm />} />
-          <Route path="/meetings/:meetingId/edit" element={<MeetingForm />} />
+          <Route path="/meetings/edit/:id" element={<MeetingForm />} />
+          <Route path="/meetings/:id" element={<MeetingDetail />} />
 
           {/* 게임 관련 라우트 */}
           <Route path="/games" element={<GameList />} />
-          <Route path="/games/:gameId" element={<GameDetail />} />
           <Route path="/games/add" element={<GameForm />} />
+          <Route path="/games/:id" element={<GameDetail />} />
 
           {/* 게임 기록 관련 라우트 */}
           <Route
             path="/meetings/:meetingId/records/add"
             element={<GameRecordForm />}
+          />
+          <Route
+            path="/game-records/add"
+            element={<StandaloneGameRecordForm />}
           />
 
           {/* 404 페이지 */}
@@ -54,6 +59,6 @@ function App() {
       <Footer />
     </div>
   );
-}
+};
 
 export default App;
