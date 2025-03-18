@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { gameApi, playerApi, gameResultApi } from "../../services/api";
-import { Game, Player, GameResultForm } from "../../types";
+import { gameApi, playerApi, gameRecordApi } from "../../services/api";
+import { Game, Player, GameResultForm, StandaloneGameRecordForm as StandaloneGameRecordFormType } from "../../types";
 
 interface StandaloneGameRecordFormState {
   gameId: number;
@@ -21,8 +21,6 @@ interface StandaloneGameRecordFormState {
   }[];
   newGame: {
     name: string;
-    minPlayers: number;
-    maxPlayers: number;
     description: string;
   };
   showNewGameForm: boolean;
@@ -45,8 +43,6 @@ const StandaloneGameRecordForm: React.FC = () => {
     unregisteredPlayers: [],
     newGame: {
       name: "",
-      minPlayers: 2,
-      maxPlayers: 8,
       description: "",
     },
     showNewGameForm: false,
@@ -112,9 +108,7 @@ const StandaloneGameRecordForm: React.FC = () => {
       ...prev,
       newGame: {
         ...prev.newGame,
-        [name.replace("new_game_", "")]: name.includes("Players")
-          ? parseInt(value)
-          : value,
+        [name.replace("new_game_", "")]: value,
       },
     }));
   };
@@ -208,8 +202,6 @@ const StandaloneGameRecordForm: React.FC = () => {
         // 새 게임 생성
         const newGame = await gameApi.create({
           name: formState.newGame.name,
-          min_players: formState.newGame.minPlayers,
-          max_players: formState.newGame.maxPlayers,
           description: formState.newGame.description,
         });
 
@@ -240,63 +232,46 @@ const StandaloneGameRecordForm: React.FC = () => {
       }
 
       // API 요청용 결과 데이터 구성
-      const results: GameResultForm[] = [
-        // 등록된 플레이어
-        ...selectedPlayers.map((player) => ({
-          game_id: finalGameId,
-          player_id: player.id,
-          score: player.score,
-          is_winner: player.isWinner,
-        })),
+      const gameRecordData: StandaloneGameRecordFormType = {
+        game_id: finalGameId,
+        date: formState.date,
+        results: [
+          // 등록된 플레이어
+          ...selectedPlayers.map((player) => ({
+            player_id: player.id,
+            score: player.score,
+            is_winner: player.isWinner,
+          })),
+          // 미등록 플레이어 - 임시로 player_id를 0으로 설정
+          ...validUnregisteredPlayers.map((player) => ({
+            player_id: 0, // 백엔드에서 이 값은 무시되고 player_name 사용
+            player_name: player.name.trim(),
+            score: player.score,
+            is_winner: player.isWinner,
+          })) as any,
+        ],
+      };
 
-        // 미등록 플레이어
-        ...validUnregisteredPlayers.map((player) => ({
-          game_id: finalGameId,
-          player_name: player.name.trim(),
-          score: player.score,
-          is_winner: player.isWinner,
-        })),
-      ];
+      // 게임 결과 추가
+      await gameRecordApi.create(0, gameRecordData); // 모임 ID가 없으므로 0 전달
 
-      // 백엔드 API를 사용하여 게임 기록 저장
-      const response = await gameResultApi.createStandalone(
-        finalGameId,
-        formState.date,
-        results
-      );
-
-      console.log("게임 기록 저장 결과:", response);
-
-      // 성공 메시지 표시 및 폼 초기화
-      setSuccess(response.message || "게임 기록이 저장되었습니다.");
-      setFormState({
-        ...formState,
-        gameId: 0,
+      // 성공 메시지 설정 및 폼 초기화
+      setSuccess("게임 기록이 성공적으로 추가되었습니다.");
+      
+      // 폼 초기화 (선택된 게임과 날짜는 유지)
+      setFormState((prev) => ({
+        ...prev,
+        players: prev.players.map(p => ({...p, isChecked: false, score: 0, isWinner: false})),
         unregisteredPlayers: [],
-        players: formState.players.map((p) => ({
-          ...p,
-          isChecked: false,
-          score: 0,
-          isWinner: false,
-        })),
-        showNewGameForm: false,
-        newGame: {
-          name: "",
-          minPlayers: 2,
-          maxPlayers: 8,
-          description: "",
-        },
-      });
-
-      // 게임 목록 페이지로 이동 (선택적)
+      }));
+      
+      // 3초 후에 성공 메시지 제거
       setTimeout(() => {
-        navigate("/games");
-      }, 2000);
-    } catch (err: any) {
-      console.error("Error submitting game record:", err);
-      const errorMessage =
-        err.response?.data?.error || "게임 기록 저장에 실패했습니다.";
-      setError(errorMessage);
+        setSuccess(null);
+      }, 3000);
+    } catch (err) {
+      setError("게임 기록 저장에 실패했습니다.");
+      console.error("Error saving game record:", err);
     } finally {
       setSubmitting(false);
     }
@@ -313,153 +288,83 @@ const StandaloneGameRecordForm: React.FC = () => {
   }
 
   return (
-    <div>
-      <h2 className="mb-4">게임 기록 추가</h2>
-
-      {error && (
-        <div
-          className="alert alert-danger alert-dismissible fade show"
-          role="alert"
-        >
-          {error}
-          <button
-            type="button"
-            className="btn-close"
-            onClick={() => setError(null)}
-            aria-label="Close"
-          ></button>
-        </div>
-      )}
-
-      {success && (
-        <div
-          className="alert alert-success alert-dismissible fade show"
-          role="alert"
-        >
-          {success}
-          <button
-            type="button"
-            className="btn-close"
-            onClick={() => setSuccess(null)}
-            aria-label="Close"
-          ></button>
-        </div>
-      )}
-
+    <div className="container mt-4">
+      <h2>독립형 게임 기록 추가</h2>
+      
+      {error && <div className="alert alert-danger">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
+      
       <form onSubmit={handleSubmit}>
-        <div className="row mb-4">
-          <div className="col-md-6">
-            <div className="card">
-              <div className="card-header">
-                <h5 className="mb-0">게임 정보</h5>
-              </div>
-              <div className="card-body">
-                <div className="mb-3">
-                  <label htmlFor="date" className="form-label">
-                    날짜
-                  </label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    id="date"
-                    value={formState.date}
-                    onChange={handleDateChange}
-                    required
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label htmlFor="gameId" className="form-label">
-                    게임
-                  </label>
-                  <select
-                    className="form-select"
-                    id="gameId"
-                    value={formState.gameId}
-                    onChange={handleGameChange}
-                  >
-                    <option value={0}>-- 게임 선택 또는 추가 --</option>
-                    {games.map((game) => (
-                      <option key={game.id} value={game.id}>
-                        {game.name}
-                      </option>
-                    ))}
-                    <option value={0}>새 게임 추가...</option>
-                  </select>
-                </div>
-
-                {formState.showNewGameForm && (
-                  <div className="border rounded p-3 bg-light">
-                    <h6 className="mb-3">새 게임 정보</h6>
-                    <div className="mb-3">
-                      <label htmlFor="new_game_name" className="form-label">
-                        게임 이름
-                      </label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        id="new_game_name"
-                        name="new_game_name"
-                        value={formState.newGame.name}
-                        onChange={handleNewGameInputChange}
-                      />
-                    </div>
-                    <div className="row">
-                      <div className="col-md-6 mb-3">
-                        <label
-                          htmlFor="new_game_minPlayers"
-                          className="form-label"
-                        >
-                          최소 인원
-                        </label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          id="new_game_minPlayers"
-                          name="new_game_minPlayers"
-                          min="1"
-                          value={formState.newGame.minPlayers}
-                          onChange={handleNewGameInputChange}
-                        />
-                      </div>
-                      <div className="col-md-6 mb-3">
-                        <label
-                          htmlFor="new_game_maxPlayers"
-                          className="form-label"
-                        >
-                          최대 인원
-                        </label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          id="new_game_maxPlayers"
-                          name="new_game_maxPlayers"
-                          min="1"
-                          value={formState.newGame.maxPlayers}
-                          onChange={handleNewGameInputChange}
-                        />
-                      </div>
-                    </div>
-                    <div className="mb-3">
-                      <label
-                        htmlFor="new_game_description"
-                        className="form-label"
-                      >
-                        게임 설명
-                      </label>
-                      <textarea
-                        className="form-control"
-                        id="new_game_description"
-                        name="new_game_description"
-                        rows={2}
-                        value={formState.newGame.description}
-                        onChange={handleNewGameInputChange}
-                      ></textarea>
-                    </div>
-                  </div>
-                )}
-              </div>
+        <div className="card mb-4">
+          <div className="card-header">
+            <h5 className="mb-0">게임 정보</h5>
+          </div>
+          <div className="card-body">
+            <div className="mb-3">
+              <label htmlFor="date" className="form-label">날짜</label>
+              <input
+                type="date"
+                className="form-control"
+                id="date"
+                value={formState.date}
+                onChange={handleDateChange}
+                required
+              />
             </div>
+            
+            <div className="mb-3">
+              <label htmlFor="game_id" className="form-label">게임 선택</label>
+              <select
+                id="game_id"
+                className="form-select"
+                value={formState.gameId}
+                onChange={handleGameChange}
+              >
+                <option value={0}>-- 새 게임 입력 --</option>
+                {games.map((game) => (
+                  <option key={game.id} value={game.id}>
+                    {game.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {formState.showNewGameForm && (
+              <div className="card mb-3">
+                <div className="card-header">
+                  <h6 className="mb-0">새 게임 정보</h6>
+                </div>
+                <div className="card-body">
+                  <div className="mb-3">
+                    <label htmlFor="new_game_name" className="form-label">
+                      게임 이름
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="new_game_name"
+                      name="new_game_name"
+                      value={formState.newGame.name}
+                      onChange={handleNewGameInputChange}
+                      required={formState.showNewGameForm}
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="new_game_description" className="form-label">
+                      설명 (선택사항)
+                    </label>
+                    <textarea
+                      className="form-control"
+                      id="new_game_description"
+                      name="new_game_description"
+                      rows={3}
+                      value={formState.newGame.description}
+                      onChange={handleNewGameInputChange}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

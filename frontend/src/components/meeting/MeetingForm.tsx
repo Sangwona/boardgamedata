@@ -1,35 +1,53 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { meetingApi } from "../../services/api";
-import { MeetingForm as MeetingFormType } from "../../types";
+import { useNavigate, useParams } from "react-router-dom";
+import { meetingApi, playerApi } from "../../services/api";
+import { MeetingForm as MeetingFormType, Player } from "../../types";
 
 const initialFormState: MeetingFormType = {
   date: "",
   location: "",
   description: "",
+  host_id: 0,
 };
 
 const MeetingForm: React.FC = () => {
   const { meetingId } = useParams<{ meetingId: string }>();
   const navigate = useNavigate();
-  const isEditMode = !!meetingId;
-
   const [form, setForm] = useState<MeetingFormType>(initialFormState);
-  const [loading, setLoading] = useState<boolean>(isEditMode);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [playersLoading, setPlayersLoading] = useState(false);
+
+  // 플레이어 목록 불러오기
+  useEffect(() => {
+    const fetchPlayers = async () => {
+      try {
+        setPlayersLoading(true);
+        const data = await playerApi.getAll();
+        setPlayers(data);
+      } catch (err) {
+        console.error("Error fetching players:", err);
+        setError("플레이어 목록을 불러오는데 실패했습니다.");
+      } finally {
+        setPlayersLoading(false);
+      }
+    };
+
+    fetchPlayers();
+  }, []);
 
   useEffect(() => {
     const fetchMeeting = async () => {
-      if (!isEditMode) return;
-
+      if (!meetingId) return;
       try {
         setLoading(true);
         const data = await meetingApi.getById(parseInt(meetingId));
         setForm({
           date: data.date,
           location: data.location,
-          description: data.description,
+          description: data.description || "",
+          host_id: data.host_id,
         });
       } catch (err) {
         setError("모임 정보를 불러오는데 실패했습니다.");
@@ -40,68 +58,59 @@ const MeetingForm: React.FC = () => {
     };
 
     fetchMeeting();
-  }, [meetingId, isEditMode]);
+  }, [meetingId]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!form.date || !form.location) {
-      setError("날짜와 장소는 필수 입력 항목입니다.");
-      return;
-    }
-
+    
+    // host_id가 문자열인 경우 숫자로 변환
+    const formData = {
+      ...form,
+      host_id: typeof form.host_id === 'string' ? parseInt(form.host_id) : form.host_id
+    };
+    
     try {
-      setIsSubmitting(true);
-      setError(null);
-
-      if (isEditMode) {
-        await meetingApi.update(parseInt(meetingId), form);
-        navigate(`/meetings/${meetingId}`);
+      setLoading(true);
+      if (meetingId) {
+        await meetingApi.update(parseInt(meetingId), formData);
       } else {
-        const newMeeting = await meetingApi.create(form);
-        navigate(`/meetings/${newMeeting.id}`);
+        await meetingApi.create(formData);
       }
+      navigate("/meetings");
     } catch (err) {
       setError("모임 저장에 실패했습니다.");
       console.error("Error saving meeting:", err);
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
-  const today = new Date().toISOString().split("T")[0];
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    
+    // host_id는 숫자로 변환
+    if (name === 'host_id') {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value === "" ? 0 : parseInt(value),
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
 
-  if (loading) {
-    return (
-      <div className="text-center my-5">
-        <div className="spinner-border" role="status">
-          <span className="visually-hidden">로딩 중...</span>
-        </div>
-      </div>
-    );
-  }
+  if (loading && !meetingId) return <div className="alert alert-info">로딩 중...</div>;
 
   return (
-    <div>
-      <h2>{isEditMode ? "모임 수정" : "새 모임 추가"}</h2>
-
-      {error && (
-        <div className="alert alert-danger my-3" role="alert">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="mt-4">
+    <div className="container mt-4">
+      <h2>{meetingId ? "모임 수정" : "새 모임"}</h2>
+      {error && <div className="alert alert-danger">{error}</div>}
+      <form onSubmit={handleSubmit}>
         <div className="mb-3">
           <label htmlFor="date" className="form-label">
             날짜
@@ -113,12 +122,9 @@ const MeetingForm: React.FC = () => {
             name="date"
             value={form.date}
             onChange={handleChange}
-            min="2020-01-01"
-            max="2030-12-31"
             required
           />
         </div>
-
         <div className="mb-3">
           <label htmlFor="location" className="form-label">
             장소
@@ -130,55 +136,67 @@ const MeetingForm: React.FC = () => {
             name="location"
             value={form.location}
             onChange={handleChange}
-            placeholder="모임 장소 (예: 스타벅스 강남점)"
             required
           />
         </div>
-
         <div className="mb-3">
           <label htmlFor="description" className="form-label">
-            설명 (선택사항)
+            설명
           </label>
           <textarea
             className="form-control"
             id="description"
             name="description"
-            rows={3}
             value={form.description}
             onChange={handleChange}
-            placeholder="모임에 대한 추가 설명"
-          ></textarea>
+            rows={3}
+          />
         </div>
-
-        <div className="d-flex gap-2 mt-4">
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={isSubmitting}
+        <div className="mb-3">
+          <label htmlFor="host_id" className="form-label">
+            호스트
+          </label>
+          <select
+            className="form-control"
+            id="host_id"
+            name="host_id"
+            value={form.host_id || ""}
+            onChange={handleChange}
+            required
           >
-            {isSubmitting ? (
-              <>
-                <span
-                  className="spinner-border spinner-border-sm me-2"
-                  role="status"
-                  aria-hidden="true"
-                ></span>
-                저장 중...
-              </>
+            <option value="">호스트 선택</option>
+            {playersLoading ? (
+              <option disabled>플레이어 목록 로딩 중...</option>
             ) : (
-              "저장"
+              players.map(player => (
+                <option key={player.id} value={player.id}>
+                  {player.name}
+                </option>
+              ))
             )}
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={() =>
-              navigate(isEditMode ? `/meetings/${meetingId}` : "/meetings")
-            }
-          >
-            취소
-          </button>
+          </select>
         </div>
+        <button 
+          type="submit" 
+          className="btn btn-primary" 
+          disabled={loading || playersLoading}
+        >
+          {loading ? (
+            <>
+              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              처리중...
+            </>
+          ) : (
+            meetingId ? "수정" : "생성"
+          )}
+        </button>
+        <button 
+          type="button" 
+          className="btn btn-secondary ms-2" 
+          onClick={() => navigate('/meetings')}
+        >
+          취소
+        </button>
       </form>
     </div>
   );

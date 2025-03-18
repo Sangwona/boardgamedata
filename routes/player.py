@@ -1,15 +1,11 @@
-from flask import Blueprint, request, jsonify, make_response
+from flask import Blueprint, request, jsonify
 from models import Player, GameResult, GameRecord, db
-from utils import create_cors_preflight_response, add_cors_headers
 
 player = Blueprint('player', __name__)
 
 # API 엔드포인트: 플레이어 목록 조회
-@player.route('/api/players', methods=['GET', 'OPTIONS'])
+@player.route('/api/players', methods=['GET'])
 def api_player_list():
-    if request.method == 'OPTIONS':
-        return create_cors_preflight_response()
-        
     players = Player.query.all()
     result = []
     for player in players:
@@ -24,11 +20,8 @@ def api_player_list():
     return jsonify(result)
 
 # API 엔드포인트: 단일 플레이어 조회
-@player.route('/api/players/<int:player_id>', methods=['GET', 'OPTIONS'])
+@player.route('/api/players/<int:player_id>', methods=['GET'])
 def api_player_detail(player_id):
-    if request.method == "OPTIONS":
-        return create_cors_preflight_response()
-        
     player = Player.query.get_or_404(player_id)
     
     # 플레이어의 게임 기록 조회 - GameRecord 테이블과 조인하여 관련 정보 가져오기
@@ -64,11 +57,8 @@ def api_player_detail(player_id):
     })
 
 # API 엔드포인트: 플레이어 추가
-@player.route('/api/players', methods=['POST', 'OPTIONS'])
+@player.route('/api/players', methods=['POST'])
 def api_add_player():
-    if request.method == "OPTIONS":
-        return create_cors_preflight_response()
-        
     data = request.json
     
     if not data:
@@ -102,11 +92,8 @@ def api_add_player():
     }), 201
 
 # API 엔드포인트: 플레이어 수정
-@player.route('/api/players/<int:player_id>', methods=['PUT', 'OPTIONS'])
+@player.route('/api/players/<int:player_id>', methods=['PUT'])
 def api_edit_player(player_id):
-    if request.method == "OPTIONS":
-        return create_cors_preflight_response()
-        
     player = Player.query.get_or_404(player_id)
     data = request.json
     
@@ -147,11 +134,8 @@ def api_edit_player(player_id):
     })
 
 # API 엔드포인트: 플레이어 삭제
-@player.route('/api/players/<int:player_id>', methods=['DELETE', 'OPTIONS'])
+@player.route('/api/players/<int:player_id>', methods=['DELETE'])
 def api_delete_player(player_id):
-    if request.method == "OPTIONS":
-        return create_cors_preflight_response()
-        
     player = Player.query.get_or_404(player_id)
     
     # 플레이어와 관련된 게임 결과 삭제
@@ -160,4 +144,4 @@ def api_delete_player(player_id):
     db.session.delete(player)
     db.session.commit()
     
-    return jsonify({'message': '플레이어가 삭제되었습니다.'}), 200
+    return jsonify({'message': '플레이어가 성공적으로 삭제되었습니다.'})

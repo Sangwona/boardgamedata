@@ -10,6 +10,8 @@ import {
   GameResultForm,
   MeetingDetail,
   GameWithStats,
+  MeetingParticipantForm,
+  StandaloneGameRecordForm,
 } from "../types";
 
 // 포트 변경: 5000 -> 5005
@@ -21,28 +23,37 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
-    "X-Requested-With": "XMLHttpRequest",
   },
   withCredentials: false,
-  timeout: 10000, // 10초 타임아웃 설정
+  timeout: 5000, // 5초 타임아웃
 });
 
 // 요청 인터셉터 추가
 api.interceptors.request.use(
   (config) => {
-    // config.headers에 대한 유효성 검사만 유지하고, 불필요한 CORS 헤더는 제거
+    console.log(`API 요청: ${config.method?.toUpperCase()} ${config.url}`);
     return config;
   },
   (error) => {
+    console.error("API 요청 에러:", error);
     return Promise.reject(error);
   }
 );
 
 // 에러 핸들링 인터셉터
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`API 응답: ${response.config.method?.toUpperCase()} ${response.config.url}`);
+    return response;
+  },
   (error) => {
-    console.error("API 요청 에러:", error.response || error);
+    console.error("API 응답 에러:", {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
     return Promise.reject(error);
   }
 );
@@ -106,6 +117,11 @@ export const meetingApi = {
   delete: async (id: number): Promise<void> => {
     await api.delete(`/meetings/${id}`);
   },
+
+  addParticipant: async (meetingId: number, participant: MeetingParticipantForm): Promise<any> => {
+    const { data } = await api.post(`/meetings/${meetingId}/participants`, participant);
+    return data;
+  }
 };
 
 // 게임 API
@@ -129,6 +145,11 @@ export const gameApi = {
 
   create: async (game: GameForm): Promise<Game> => {
     const { data } = await api.post("/games", game);
+    return data;
+  },
+
+  update: async (id: number, game: GameForm): Promise<Game> => {
+    const { data } = await api.put(`/games/${id}`, game);
     return data;
   },
 };
@@ -185,6 +206,27 @@ export const statsApi = {
   getPlayerStats: async (playerId: number) => {
     const response = await api.get(`/stats/player/${playerId}`);
     return response.data;
+  },
+};
+
+// 게임 기록 API
+export const gameRecordApi = {
+  create: async (
+    meetingId: number,
+    recordData: StandaloneGameRecordForm
+  ): Promise<any> => {
+    const { data } = await api.post(`/meetings/${meetingId}/records`, recordData);
+    return data;
+  },
+
+  getByMeetingId: async (meetingId: number): Promise<any> => {
+    const { data } = await api.get(`/meetings/${meetingId}/records`);
+    return data;
+  },
+
+  getById: async (recordId: number): Promise<any> => {
+    const { data } = await api.get(`/game-records/${recordId}`);
+    return data;
   },
 };
 

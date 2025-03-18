@@ -105,7 +105,7 @@ const MeetingList: React.FC = () => {
                   </td>
                   <td>
                     <span className="badge bg-primary rounded-pill">
-                      {meeting.participants_count}명
+                      {meeting.participant_count}명
                       {meeting.unregistered_count > 0 &&
                         ` (미등록: ${meeting.unregistered_count}명)`}
                     </span>

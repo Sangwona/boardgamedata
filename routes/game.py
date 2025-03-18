@@ -1,15 +1,11 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from models import db, Game, GameRecord, GameResult
-from utils import add_cors_headers, create_cors_preflight_response
 
 game = Blueprint('game', __name__)
 
 # API 엔드포인트: 게임 목록 조회
-@game.route('/api/games', methods=['GET', 'OPTIONS'])
+@game.route('/api/games', methods=['GET'])
 def api_game_list():
-    if request.method == 'OPTIONS':
-        return create_cors_preflight_response()
-        
     games = Game.query.all()
     result = []
     
@@ -17,19 +13,14 @@ def api_game_list():
         result.append({
             'id': game.id,
             'name': game.name,
-            'min_players': game.min_players,
-            'max_players': game.max_players,
             'description': game.description
         })
     
     return jsonify(result)
 
 # API 엔드포인트: 게임 상세 조회
-@game.route('/api/games/<int:game_id>', methods=['GET', 'OPTIONS'])
+@game.route('/api/games/<int:game_id>', methods=['GET'])
 def api_game_detail(game_id):
-    if request.method == 'OPTIONS':
-        return create_cors_preflight_response()
-        
     game = Game.query.get_or_404(game_id)
     game_records = GameRecord.query.filter_by(game_id=game_id).all()
     
@@ -37,17 +28,23 @@ def api_game_detail(game_id):
     result = {
         'id': game.id,
         'name': game.name,
-        'min_players': game.min_players,
-        'max_players': game.max_players,
         'description': game.description,
-        'play_count': len(game_records),
-        'stats': {}
+        'total_plays': len(game_records),
+        'total_players': 0,
+        'win_rate': 0,
+        'average_score': 0
     }
     
     # 플레이어별 승률 통계
     player_stats = {}
+    total_score = 0
+    total_results = 0
+    
     for record in game_records:
         for result_obj in record.results:
+            total_results += 1
+            total_score += result_obj.score
+            
             player_id = result_obj.player_id
             if player_id:  # 등록된 플레이어만 통계에 포함
                 if player_id not in player_stats:
@@ -62,30 +59,29 @@ def api_game_detail(game_id):
                 if result_obj.is_winner:
                     player_stats[player_id]['wins'] += 1
     
+    # 통계 계산
+    result['total_players'] = len(player_stats)
+    result['average_score'] = round(total_score / total_results, 1) if total_results > 0 else 0
+    
     # 승률 계산
+    total_wins = 0
     for player_id, stats in player_stats.items():
         stats['win_rate'] = round((stats['wins'] / stats['plays']) * 100, 1) if stats['plays'] > 0 else 0
+        total_wins += stats['wins']
     
-    # 통계 데이터를 리스트로 변환하여 결과에 추가
-    result['stats']['players'] = list(player_stats.values())
+    result['win_rate'] = round((total_wins / total_results) * 100, 1) if total_results > 0 else 0
     
-    response = make_response(jsonify(result))
-    return add_cors_headers(response)
+    return jsonify(result)
 
 # API 엔드포인트: 게임 추가
-@game.route('/api/games', methods=['POST', 'OPTIONS'])
+@game.route('/api/games', methods=['POST'])
 def api_add_game():
-    if request.method == 'OPTIONS':
-        return create_cors_preflight_response()
-        
     data = request.json
     
     if not data:
         return jsonify({'error': '데이터가 누락되었습니다.'}), 400
     
     name = data.get('name')
-    min_players = data.get('min_players', 2)
-    max_players = data.get('max_players', 8)
     description = data.get('description', '')
     
     if not name:
@@ -93,8 +89,6 @@ def api_add_game():
     
     game = Game(
         name=name,
-        min_players=min_players,
-        max_players=max_players,
         description=description
     )
     
@@ -104,11 +98,36 @@ def api_add_game():
     return jsonify({
         'id': game.id,
         'name': game.name,
-        'min_players': game.min_players,
-        'max_players': game.max_players,
         'description': game.description,
         'message': '게임이 성공적으로 추가되었습니다.'
     }), 201
+
+# API 엔드포인트: 게임 수정
+@game.route('/api/games/<int:game_id>', methods=['PUT'])
+def api_update_game(game_id):
+    game = Game.query.get_or_404(game_id)
+    data = request.json
+    
+    if not data:
+        return jsonify({'error': '데이터가 누락되었습니다.'}), 400
+    
+    name = data.get('name')
+    description = data.get('description', '')
+    
+    if not name:
+        return jsonify({'error': '게임 이름은 필수 입력 항목입니다.'}), 400
+    
+    game.name = name
+    game.description = description
+    
+    db.session.commit()
+    
+    return jsonify({
+        'id': game.id,
+        'name': game.name,
+        'description': game.description,
+        'message': '게임이 성공적으로 수정되었습니다.'
+    })
 
 @game.route('/games')
 def game_list():
@@ -119,8 +138,6 @@ def game_list():
 def add_game():
     if request.method == 'POST':
         name = request.form.get('name')
-        min_players = request.form.get('min_players', type=int)
-        max_players = request.form.get('max_players', type=int)
         description = request.form.get('description')
         
         if not name:
@@ -129,8 +146,6 @@ def add_game():
         
         game = Game(
             name=name,
-            min_players=min_players,
-            max_players=max_players,
             description=description
         )
         db.session.add(game)
@@ -175,8 +190,6 @@ def edit_game(game_id):
     
     if request.method == 'POST':
         name = request.form.get('name')
-        min_players = request.form.get('min_players', type=int)
-        max_players = request.form.get('max_players', type=int)
         description = request.form.get('description')
         
         if not name:
@@ -184,8 +197,6 @@ def edit_game(game_id):
             return render_template('game/edit.html', game=game)
         
         game.name = name
-        game.min_players = min_players
-        game.max_players = max_players
         game.description = description
         
         db.session.commit()

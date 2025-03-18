@@ -4,12 +4,13 @@ import {
   meetingApi,
   gameApi,
   playerApi,
-  gameResultApi,
+  gameRecordApi,
 } from "../../services/api";
-import { Game, Player, MeetingDetail, GameResultForm } from "../../types";
+import { Game, Player, MeetingDetail, GameResultForm, StandaloneGameRecordForm } from "../../types";
 
 interface GameRecordFormState {
   gameId: number;
+  date: string;
   players: {
     id: number;
     name: string;
@@ -25,8 +26,6 @@ interface GameRecordFormState {
   }[];
   newGame: {
     name: string;
-    minPlayers: number;
-    maxPlayers: number;
     description: string;
   };
   showNewGameForm: boolean;
@@ -45,12 +44,11 @@ const GameRecordForm: React.FC = () => {
 
   const [formState, setFormState] = useState<GameRecordFormState>({
     gameId: 0,
+    date: new Date().toISOString().split('T')[0],
     players: [],
     unregisteredPlayers: [],
     newGame: {
       name: "",
-      minPlayers: 2,
-      maxPlayers: 8,
       description: "",
     },
     showNewGameForm: false,
@@ -113,10 +111,15 @@ const GameRecordForm: React.FC = () => {
       ...prev,
       newGame: {
         ...prev.newGame,
-        [name.replace("new_game_", "")]: name.includes("Players")
-          ? parseInt(value)
-          : value,
+        [name.replace("new_game_", "")]: value,
       },
+    }));
+  };
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormState((prev) => ({
+      ...prev,
+      date: e.target.value,
     }));
   };
 
@@ -201,8 +204,6 @@ const GameRecordForm: React.FC = () => {
         // 새 게임 생성
         const newGame = await gameApi.create({
           name: formState.newGame.name,
-          min_players: formState.newGame.minPlayers,
-          max_players: formState.newGame.maxPlayers,
           description: formState.newGame.description,
         });
 
@@ -233,26 +234,25 @@ const GameRecordForm: React.FC = () => {
       }
 
       // API 요청용 결과 데이터 구성
-      const results: GameResultForm[] = [
-        // 등록된 플레이어
-        ...selectedPlayers.map((player) => ({
-          game_id: finalGameId,
-          player_id: player.id,
-          score: player.score,
-          is_winner: player.isWinner,
-        })),
-
-        // 미등록 플레이어
-        ...validUnregisteredPlayers.map((player) => ({
-          game_id: finalGameId,
-          player_name: player.name.trim(),
-          score: player.score,
-          is_winner: player.isWinner,
-        })),
-      ];
-
-      // 게임 결과 추가
-      await gameResultApi.create(parseInt(meetingId!), results);
+      await gameRecordApi.create(parseInt(meetingId!), {
+        game_id: finalGameId,
+        date: formState.date,
+        results: [
+          // 등록된 플레이어
+          ...selectedPlayers.map((player) => ({
+            player_id: player.id,
+            score: player.score,
+            is_winner: player.isWinner,
+          })),
+          // 미등록 플레이어 - 임시로 player_id를 0으로 설정
+          ...validUnregisteredPlayers.map((player) => ({
+            player_id: 0,  // 백엔드에서 이 값은 무시되고 player_name이 사용됨
+            player_name: player.name.trim(),
+            score: player.score,
+            is_winner: player.isWinner,
+          })),
+        ],
+      });
 
       // 모임 상세 페이지로 이동
       navigate(`/meetings/${meetingId}`);
@@ -275,40 +275,49 @@ const GameRecordForm: React.FC = () => {
   }
 
   return (
-    <div>
-      <h2>게임 기록 추가</h2>
-
-      {error && (
-        <div className="alert alert-danger my-3" role="alert">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="mt-4">
+    <div className="container mt-4">
+      <h2>{meeting ? `${meeting.date} ${meeting.location} 게임 기록` : "게임 기록 추가"}</h2>
+      
+      {error && <div className="alert alert-danger">{error}</div>}
+      
+      <form onSubmit={handleSubmit}>
         <div className="card mb-4">
           <div className="card-header">
-            <h5 className="mb-0">게임 선택</h5>
+            <h5 className="mb-0">게임 정보</h5>
           </div>
           <div className="card-body">
-            <div className="row mb-3">
-              <div className="col-md-8">
-                <label htmlFor="game" className="form-label">
-                  게임
-                </label>
-                <select
-                  className="form-select"
-                  id="game"
-                  value={formState.gameId}
-                  onChange={handleGameChange}
-                >
-                  <option value="0">-- 게임 선택 또는 새 게임 추가 --</option>
-                  {games.map((game) => (
-                    <option key={game.id} value={game.id}>
-                      {game.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="mb-3">
+              <label htmlFor="date" className="form-label">
+                날짜
+              </label>
+              <input
+                type="date"
+                className="form-control"
+                id="date"
+                name="date"
+                value={formState.date}
+                onChange={handleDateChange}
+                required
+              />
+            </div>
+            
+            <div className="mb-3">
+              <label htmlFor="game_id" className="form-label">
+                게임 선택
+              </label>
+              <select
+                id="game_id"
+                className="form-select"
+                value={formState.gameId}
+                onChange={handleGameChange}
+              >
+                <option value={0}>-- 새 게임 입력 --</option>
+                {games.map((game) => (
+                  <option key={game.id} value={game.id}>
+                    {game.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {formState.showNewGameForm && (
@@ -330,35 +339,7 @@ const GameRecordForm: React.FC = () => {
                     required={formState.showNewGameForm}
                   />
                 </div>
-                <div className="col-md-3 mb-3">
-                  <label htmlFor="new_game_minPlayers" className="form-label">
-                    최소 인원
-                  </label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    id="new_game_minPlayers"
-                    name="new_game_minPlayers"
-                    min="1"
-                    value={formState.newGame.minPlayers}
-                    onChange={handleNewGameInputChange}
-                  />
-                </div>
-                <div className="col-md-3 mb-3">
-                  <label htmlFor="new_game_maxPlayers" className="form-label">
-                    최대 인원
-                  </label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    id="new_game_maxPlayers"
-                    name="new_game_maxPlayers"
-                    min="1"
-                    value={formState.newGame.maxPlayers}
-                    onChange={handleNewGameInputChange}
-                  />
-                </div>
-                <div className="col-12">
+                <div className="col-md-6 mb-3">
                   <label htmlFor="new_game_description" className="form-label">
                     설명 (선택사항)
                   </label>

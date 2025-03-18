@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
 # 데이터베이스 인스턴스 생성
 db = SQLAlchemy()
@@ -15,13 +16,15 @@ class Player(db.Model):
 # 모임 모델
 class Meeting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.String(8), nullable=False)  # YY-MM-DD 형식
-    location = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.String(200), nullable=True)
-    
-    # 관계 설정
+    date = db.Column(db.Date, nullable=False)
+    location = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    host_id = db.Column(db.Integer, db.ForeignKey('player.id'), nullable=False)
+    host = db.relationship('Player', backref='hosted_meetings')
     game_records = db.relationship('GameRecord', backref='meeting', lazy=True)
-    
+    planned_games = db.relationship('Game', secondary='meeting_planned_games')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
     def __repr__(self):
         return f'<Meeting {self.date} at {self.location}>'
 
@@ -29,8 +32,6 @@ class Meeting(db.Model):
 class Game(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    min_players = db.Column(db.Integer, default=2)
-    max_players = db.Column(db.Integer, default=4)
     description = db.Column(db.String(500), nullable=True)
     
     # 관계 설정
@@ -44,6 +45,7 @@ class GameRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     meeting_id = db.Column(db.Integer, db.ForeignKey('meeting.id'), nullable=True)
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
+    date = db.Column(db.Date, default=datetime.utcnow, nullable=False)
     
     # 관계 설정
     results = db.relationship('GameResult', backref='game_record', cascade='all, delete-orphan', lazy=True)
@@ -66,3 +68,23 @@ class GameResult(db.Model):
         else:
             player_info = f'Unregistered: {self.player_name}'
         return f'<GameResult {self.id}, {player_info}, Score: {self.score}, Winner: {self.is_winner}>'
+
+# 모임 예정 게임 테이블
+meeting_planned_games = db.Table('meeting_planned_games',
+    db.Column('meeting_id', db.Integer, db.ForeignKey('meeting.id'), primary_key=True),
+    db.Column('game_id', db.Integer, db.ForeignKey('game.id'), primary_key=True)
+)
+
+class MeetingParticipant(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey('meeting.id'), nullable=False)
+    player_id = db.Column(db.Integer, db.ForeignKey('player.id'), nullable=False)
+    arrival_time = db.Column(db.Time, nullable=False, default=datetime.strptime('00:00', '%H:%M').time())
+    status = db.Column(db.String(20), nullable=False, default='confirmed')  # confirmed, maybe, declined
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    meeting = db.relationship('Meeting', backref='participants')
+    player = db.relationship('Player', backref='meeting_participations')
+
+    def __repr__(self):
+        return f'<MeetingParticipant {self.player.name} at {self.meeting.date}>'

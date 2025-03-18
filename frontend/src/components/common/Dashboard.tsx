@@ -400,12 +400,12 @@ const Dashboard: React.FC = () => {
                       <p className="mb-1">
                         {meeting.description || "설명 없음"}
                       </p>
-                      <small>
-                        참가자:{" "}
-                        {meeting.participants_count +
-                          meeting.unregistered_count}
-                        명
-                      </small>
+                      {meeting.participant_count > 0 && (
+                        <small>
+                          <i className="bi bi-people me-1"></i>
+                          {meeting.participant_count}명 참가
+                        </small>
+                      )}
                     </Link>
                   ))}
                 </div>
@@ -436,9 +436,6 @@ const Dashboard: React.FC = () => {
                     >
                       <div className="d-flex w-100 justify-content-between">
                         <h6 className="mb-1">{game.name}</h6>
-                        <small>
-                          {game.min_players}~{game.max_players}명
-                        </small>
                       </div>
                       <p className="mb-1">{game.description || "설명 없음"}</p>
                     </Link>

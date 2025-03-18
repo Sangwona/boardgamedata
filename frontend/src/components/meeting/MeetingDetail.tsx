@@ -4,7 +4,7 @@ import { meetingApi } from "../../services/api";
 import { MeetingDetail as MeetingDetailType } from "../../types";
 
 const MeetingDetail: React.FC = () => {
-  const { meetingId } = useParams<{ meetingId: string }>();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [meeting, setMeeting] = useState<MeetingDetailType | null>(null);
@@ -15,8 +15,21 @@ const MeetingDetail: React.FC = () => {
     const fetchMeetingDetail = async () => {
       try {
         setLoading(true);
-        const data = await meetingApi.getById(parseInt(meetingId!));
-        setMeeting(data);
+        setError(null);
+        console.log(`미팅 상세 정보 요청 시작: ${id}`);
+        const data = await meetingApi.getById(parseInt(id!));
+        console.log(`미팅 상세 정보 응답:`, data);
+        
+        // API 응답 구조를 확인하고 필요한 데이터를 채움
+        const processedData = {
+          ...data,
+          // game_records가 없고 games가 있는 경우 호환성을 위해 매핑
+          game_records: data.game_records || (data as any).games || [],
+          // participants가 없는 경우 빈 배열로 초기화
+          participants: data.participants || []
+        };
+        
+        setMeeting(processedData);
       } catch (err: any) {
         console.error("Error fetching meeting details:", err);
         const errorMessage =
@@ -25,20 +38,24 @@ const MeetingDetail: React.FC = () => {
             err.message || "알 수 없는 오류"
           }`;
         setError(errorMessage);
+        setMeeting(null);
       } finally {
         setLoading(false);
       }
     };
 
-    if (meetingId) {
+    if (id) {
       fetchMeetingDetail();
+    } else {
+      setError("유효하지 않은 모임 ID입니다.");
+      setLoading(false);
     }
-  }, [meetingId]);
+  }, [id]);
 
   const handleDelete = async () => {
     if (window.confirm("정말로 이 모임을 삭제하시겠습니까?")) {
       try {
-        await meetingApi.delete(parseInt(meetingId!));
+        await meetingApi.delete(parseInt(id!));
         navigate("/meetings");
       } catch (err) {
         setError("모임 삭제에 실패했습니다.");
@@ -50,17 +67,27 @@ const MeetingDetail: React.FC = () => {
   if (loading) {
     return (
       <div className="text-center my-5">
-        <div className="spinner-border" role="status">
+        <div className="spinner-border text-primary" role="status">
           <span className="visually-hidden">로딩 중...</span>
         </div>
+        <div className="mt-3">모임 정보를 불러오는 중입니다...</div>
       </div>
     );
   }
 
   if (error || !meeting) {
     return (
-      <div className="alert alert-danger my-4" role="alert">
-        {error || "모임 정보를 찾을 수 없습니다."}
+      <div className="container my-4">
+        <div className="alert alert-danger" role="alert">
+          <h4 className="alert-heading">오류가 발생했습니다</h4>
+          <p>{error || "모임 정보를 찾을 수 없습니다."}</p>
+          <hr />
+          <p className="mb-0">
+            <Link to="/meetings" className="btn btn-outline-primary">
+              모임 목록으로 돌아가기
+            </Link>
+          </p>
+        </div>
       </div>
     );
   }
@@ -71,13 +98,13 @@ const MeetingDetail: React.FC = () => {
         <h2>{meeting.date} 모임</h2>
         <div className="btn-group">
           <Link
-            to={`/meetings/${meetingId}/edit`}
+            to={`/meetings/${id}/edit`}
             className="btn btn-outline-primary"
           >
             <i className="bi bi-pencil me-1"></i> 수정
           </Link>
           <Link
-            to={`/meetings/${meetingId}/records/add`}
+            to={`/meetings/${id}/records/add`}
             className="btn btn-outline-success"
           >
             <i className="bi bi-plus-circle me-1"></i> 게임 기록 추가
@@ -116,7 +143,9 @@ const MeetingDetail: React.FC = () => {
           <h5 className="mb-0">참가자 목록</h5>
         </div>
         <div className="card-body">
-          {meeting.participants.length === 0 ? (
+          {!meeting.participants ? (
+            <div className="alert alert-info mb-0">참가자 정보를 불러올 수 없습니다.</div>
+          ) : meeting.participants.length === 0 ? (
             <div className="alert alert-info mb-0">참가자가 없습니다.</div>
           ) : (
             <div className="row row-cols-1 row-cols-md-3 g-3">
@@ -159,28 +188,30 @@ const MeetingDetail: React.FC = () => {
           <h5 className="mb-0">게임 기록</h5>
         </div>
         <div className="card-body">
-          {meeting.games.length === 0 ? (
+          {!meeting.game_records ? (
+            <div className="alert alert-info mb-0">게임 기록 정보를 불러올 수 없습니다.</div>
+          ) : meeting.game_records.length === 0 ? (
             <div className="alert alert-info mb-0">게임 기록이 없습니다.</div>
           ) : (
             <div className="accordion" id="gamesAccordion">
-              {meeting.games.map((game, index) => (
-                <div className="accordion-item" key={game.id}>
-                  <h2 className="accordion-header" id={`heading-${game.id}`}>
+              {meeting.game_records.map((record, index) => (
+                <div className="accordion-item" key={record.id}>
+                  <h2 className="accordion-header" id={`heading-${record.id}`}>
                     <button
                       className="accordion-button collapsed"
                       type="button"
                       data-bs-toggle="collapse"
-                      data-bs-target={`#collapse-${game.id}`}
+                      data-bs-target={`#collapse-${record.id}`}
                       aria-expanded="false"
-                      aria-controls={`collapse-${game.id}`}
+                      aria-controls={`collapse-${record.id}`}
                     >
-                      {game.name} - {game.results.length}명 참가
+                      {record.game.name} - {record.results?.length || 0}명 참가
                     </button>
                   </h2>
                   <div
-                    id={`collapse-${game.id}`}
+                    id={`collapse-${record.id}`}
                     className="accordion-collapse collapse"
-                    aria-labelledby={`heading-${game.id}`}
+                    aria-labelledby={`heading-${record.id}`}
                     data-bs-parent="#gamesAccordion"
                   >
                     <div className="accordion-body">
@@ -194,10 +225,10 @@ const MeetingDetail: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {game.results.map((result) => (
+                            {record.results && record.results.map((result) => (
                               <tr key={result.id}>
                                 <td>
-                                  {result.player.registered ? (
+                                  {result.player && result.player.registered ? (
                                     <Link
                                       to={`/players/${result.player.id}`}
                                       className="text-decoration-none"
@@ -206,7 +237,7 @@ const MeetingDetail: React.FC = () => {
                                     </Link>
                                   ) : (
                                     <span>
-                                      {result.player.name}{" "}
+                                      {result.player?.name || result.player_name || "알 수 없음"}{" "}
                                       <i className="bi bi-person-dash text-warning"></i>
                                     </span>
                                   )}

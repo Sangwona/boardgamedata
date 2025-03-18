@@ -2,7 +2,7 @@
 export interface Player {
   id: number;
   name: string;
-  birth_year: number;
+  birth_year: number | null;
   mbti: string;
   location: string;
   nickname?: string;
@@ -12,7 +12,7 @@ export interface Player {
 
 export interface PlayerForm {
   name: string;
-  birth_year: number;
+  birth_year: number | null;
   mbti: string;
   location: string;
 }
@@ -22,49 +22,46 @@ export interface Meeting {
   id: number;
   date: string;
   location: string;
-  description: string;
-  participants_count: number;
+  description: string | null;
+  host_id: number;
+  created_at: string;
+  host: Player;
+  game_count: number;
+  participant_count: number;
   unregistered_count: number;
+  planned_games: Game[];
 }
 
-export interface MeetingDetail
-  extends Omit<Meeting, "participants_count" | "unregistered_count"> {
-  participants: Participant[];
-  games: GameWithResults[];
-}
-
-export interface Participant {
-  id: number | null;
-  name: string;
-  registered: boolean;
-}
-
-export interface GameWithResults {
-  id: number;
-  name: string;
-  results: GameResultDetail[];
-}
-
-export interface GameResultDetail {
-  id: number;
-  player: Participant;
-  score: number;
-  is_winner: boolean;
+export interface MeetingDetail extends Meeting {
+  participants: {
+    id: number;
+    name: string;
+    arrival_time: string;
+    status: "confirmed" | "maybe" | "declined";
+    registered: boolean;
+  }[];
+  game_records: GameRecord[];
 }
 
 export interface MeetingForm {
   date: string;
   location: string;
   description: string;
+  host_id: number;
+}
+
+export interface MeetingParticipantForm {
+  player_id: number;
+  arrival_time: string;
+  status?: "confirmed" | "maybe" | "declined";
 }
 
 // 게임 관련 타입
 export interface Game {
   id: number;
   name: string;
-  min_players: number;
-  max_players: number;
   description: string;
+  created_at: string;
 }
 
 export interface PlayerStat {
@@ -76,37 +73,34 @@ export interface PlayerStat {
 }
 
 export interface GameWithStats extends Game {
-  play_count: number;
-  stats: {
-    players: PlayerStat[];
-  };
+  total_plays: number;
+  total_players: number;
+  win_rate: number;
+  average_score: number;
 }
 
 export interface GameForm {
   name: string;
-  min_players: number;
-  max_players: number;
   description: string;
 }
 
 // 게임 결과 관련 타입
 export interface GameResult {
   id: number;
-  game_id: number;
-  game_name?: string;
+  game_record_id: number;
   player_id: number | null;
-  player_name?: string;
-  meeting_id: number;
-  meeting_date?: string;
-  meeting_location?: string;
+  player_name: string;
   score: number;
   is_winner: boolean;
+  player: {
+    id: number | null;
+    name: string;
+    registered: boolean;
+  };
 }
 
 export interface GameResultForm {
-  game_id: number;
-  player_id?: number;
-  player_name?: string;
+  player_id: number;
   score: number;
   is_winner: boolean;
 }
@@ -116,6 +110,15 @@ export interface StandaloneGameRecordForm {
   game_id: number;
   date: string;
   results: GameResultForm[];
+}
+
+export interface GameRecord {
+  id: number;
+  game_id: number;
+  meeting_id: number | null;
+  date: string;
+  game: Game;
+  results: GameResult[];
 }
 
 // API 응답 타입

@@ -1,22 +1,8 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, make_response
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
 from models import db, GameRecord, GameResult, Game, Player, Meeting
 from datetime import datetime, date
 
 game_record = Blueprint('game_record', __name__)
-
-# CORS 유틸리티 함수
-def add_cors_headers(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
-
-def create_cors_preflight_response():
-    response = make_response()
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
 
 # 템플릿 경로 상수 정의
 GAME_RECORD_ADD_TEMPLATE = 'game_record/add_standalone.html'
@@ -39,14 +25,10 @@ def add_game_record():
         # 새 게임 처리
         new_game_name = request.form.get('new_game_name', '').strip()
         if not game_id and new_game_name:
-            new_min_players = int(request.form.get('new_game_min_players', 1))
-            new_max_players = int(request.form.get('new_game_max_players', 4))
             new_game_description = request.form.get('new_game_description', '').strip()
             
             new_game = Game(
                 name=new_game_name,
-                min_players=new_min_players,
-                max_players=new_max_players,
                 description=new_game_description
             )
             db.session.add(new_game)
@@ -78,7 +60,8 @@ def add_game_record():
         # 새 게임 기록 생성
         game_record = GameRecord(
             game_id=game_id,
-            meeting_id=meeting_id
+            meeting_id=meeting_id,
+            date=datetime.strptime(record_date, '%Y-%m-%d').date()
         )
         db.session.add(game_record)
         db.session.flush()  # ID 할당을 위해 flush
@@ -132,17 +115,13 @@ def add_game_record():
     return render_template(GAME_RECORD_ADD_TEMPLATE, games=games, players=players, today=date.today())
 
 # API 엔드포인트: 독립형 게임 기록 추가 (모임 없이)
-@game_record.route('/api/game-records', methods=['POST', 'OPTIONS'])
+@game_record.route('/api/game-records', methods=['POST'])
 def api_add_standalone_game_record():
-    if request.method == 'OPTIONS':
-        return create_cors_preflight_response()
-    
     data = request.json
     
     # 필수 데이터 확인
     if not data or 'game_id' not in data or 'date' not in data or 'results' not in data:
-        response = make_response(jsonify({'error': '필수 데이터가 누락되었습니다.'}), 400)
-        return add_cors_headers(response)
+        return jsonify({'error': '필수 데이터가 누락되었습니다.'}), 400
     
     try:
         game_id = data['game_id']
@@ -153,24 +132,22 @@ def api_add_standalone_game_record():
         try:
             parsed_date = datetime.strptime(record_date, '%Y-%m-%d').date()
         except ValueError:
-            response = make_response(jsonify({'error': '날짜 형식이 올바르지 않습니다.'}), 400)
-            return add_cors_headers(response)
+            return jsonify({'error': '날짜 형식이 올바르지 않습니다.'}), 400
         
         # 게임 존재 확인
         game = Game.query.get(game_id)
         if not game:
-            response = make_response(jsonify({'error': '존재하지 않는 게임입니다.'}), 404)
-            return add_cors_headers(response)
+            return jsonify({'error': '존재하지 않는 게임입니다.'}), 404
         
         # 최소 한 명 이상의 결과 확인
         if not results or len(results) == 0:
-            response = make_response(jsonify({'error': '최소 한 명 이상의 플레이어를 추가해야 합니다.'}), 400)
-            return add_cors_headers(response)
+            return jsonify({'error': '최소 한 명 이상의 플레이어를 추가해야 합니다.'}), 400
         
         # 새 게임 기록 생성 (모임 없이)
         game_record = GameRecord(
             game_id=game_id,
-            meeting_id=None  # 모임 없음
+            meeting_id=None,  # 모임 없음
+            date=parsed_date
         )
         db.session.add(game_record)
         db.session.flush()  # ID 할당을 위해 flush
@@ -188,8 +165,7 @@ def api_add_standalone_game_record():
             if player_id:
                 player = Player.query.get(player_id)
                 if not player:
-                    response = make_response(jsonify({'error': f'존재하지 않는 플레이어 ID: {player_id}'}), 404)
-                    return add_cors_headers(response)
+                    return jsonify({'error': f'존재하지 않는 플레이어 ID: {player_id}'}), 404
             
             # 결과 저장
             result = GameResult(
@@ -214,13 +190,110 @@ def api_add_standalone_game_record():
             'message': '게임 기록이 성공적으로 추가되었습니다.'
         }
         
-        response = make_response(jsonify(response_data), 201)
-        return add_cors_headers(response)
+        return jsonify(response_data), 201
     
     except Exception as e:
         # 오류 발생 시 롤백
         db.session.rollback()
         
         # 오류 응답
-        response = make_response(jsonify({'error': f'게임 기록 저장 중 오류가 발생했습니다: {str(e)}'}), 500)
-        return add_cors_headers(response)
+        return jsonify({'error': f'게임 기록 저장 중 오류가 발생했습니다: {str(e)}'}), 500
+
+# API 엔드포인트: 미팅별 게임 기록 추가
+@game_record.route('/api/meetings/<int:meeting_id>/records', methods=['POST'])
+def api_add_meeting_game_record(meeting_id):
+    data = request.json
+    
+    # 필수 데이터 확인
+    if not data or 'game_id' not in data or 'results' not in data:
+        return jsonify({'error': '필수 데이터가 누락되었습니다.'}), 400
+    
+    try:
+        game_id = data['game_id']
+        results = data['results']
+        record_date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        
+        # 날짜 형식 확인 및 변환
+        try:
+            parsed_date = datetime.strptime(record_date, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': '날짜 형식이 올바르지 않습니다.'}), 400
+        
+        # 게임 존재 확인
+        game = Game.query.get(game_id)
+        if not game:
+            return jsonify({'error': '존재하지 않는 게임입니다.'}), 404
+        
+        # 미팅 존재 확인 (미팅 ID가 0이면 독립형 게임 기록으로 처리)
+        meeting = None
+        if meeting_id > 0:
+            meeting = Meeting.query.get(meeting_id)
+            if not meeting:
+                return jsonify({'error': '존재하지 않는 모임입니다.'}), 404
+        
+        # 플레이어 확인
+        if not results or len(results) == 0:
+            return jsonify({'error': '최소 한 명 이상의 플레이어를 추가해야 합니다.'}), 400
+        
+        # 새 게임 기록 생성
+        game_record = GameRecord(
+            game_id=game_id,
+            meeting_id=meeting_id if meeting_id > 0 else None,
+            date=parsed_date
+        )
+        db.session.add(game_record)
+        db.session.flush()  # ID 할당을 위해 flush
+        
+        # 게임 결과 처리
+        result_ids = []
+        for result_data in results:
+            # 등록된 플레이어 또는 미등록 플레이어 처리
+            player_id = result_data.get('player_id')
+            player_name = result_data.get('player_name')
+            score = result_data.get('score', 0)
+            is_winner = result_data.get('is_winner', False)
+            
+            # player_id가 0이면 미등록 플레이어로 간주
+            if player_id == 0 and player_name:
+                player_id = None
+            # 등록된 플레이어인 경우 player_id 확인
+            elif player_id and player_id > 0:
+                player = Player.query.get(player_id)
+                if not player:
+                    return jsonify({'error': f'존재하지 않는 플레이어 ID: {player_id}'}), 404
+            # 플레이어 정보가 없는 경우
+            elif not player_name:
+                continue
+            
+            # 결과 저장
+            result = GameResult(
+                game_record_id=game_record.id,
+                player_id=player_id if player_id and player_id > 0 else None,
+                player_name=player_name if not player_id or player_id == 0 else None,
+                score=score,
+                is_winner=is_winner
+            )
+            db.session.add(result)
+            db.session.flush()
+            result_ids.append(result.id)
+        
+        db.session.commit()
+        
+        # 성공 응답
+        response_data = {
+            'id': game_record.id,
+            'game_id': game_record.game_id,
+            'meeting_id': game_record.meeting_id,
+            'date': record_date,
+            'result_ids': result_ids,
+            'message': '게임 기록이 성공적으로 추가되었습니다.'
+        }
+        
+        return jsonify(response_data), 201
+    
+    except Exception as e:
+        # 오류 발생 시 롤백
+        db.session.rollback()
+        
+        # 오류 응답
+        return jsonify({'error': f'게임 기록 저장 중 오류가 발생했습니다: {str(e)}'}), 500
